@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // The login token lives in localStorage, so injected script must not run. Build only: the dev server
@@ -21,8 +21,15 @@ const csp = {
   transformIndexHtml: () => [{ tag: 'meta', attrs: { 'http-equiv': 'Content-Security-Policy', content: CSP }, injectTo: 'head-prepend' }],
 }
 
-export default defineConfig({
-  plugins: [react(), csp],
-  // Keep the browser's Host header: Django's CSRF check compares it with the Origin header.
-  server: { proxy: { '/api': { target: 'http://127.0.0.1:8000', changeOrigin: false } } },
+export default defineConfig(({ mode }) => {
+  // Dev server settings from .env (see .env.example). '' prefix: read unprefixed vars, config side only.
+  const env = loadEnv(mode, import.meta.dirname, '')
+  return {
+    plugins: [react(), csp],
+    server: {
+      port: Number(env.DEV_PORT) || undefined,
+      // Keep the browser's Host header: Django's CSRF check compares it with the Origin header.
+      proxy: { '/api': { target: env.API_PROXY_TARGET || 'http://127.0.0.1:8000', changeOrigin: false } },
+    },
+  }
 })

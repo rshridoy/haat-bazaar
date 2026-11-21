@@ -71,6 +71,8 @@ DATABASES = {'default': {
     'PASSWORD': os.environ.get('POSTGRES_PASSWORD', ''),
     'HOST': os.environ.get('POSTGRES_HOST', ''),  # empty = local Unix socket
     'PORT': os.environ.get('POSTGRES_PORT', ''),
+    # require for a remote database such as Supabase; empty keeps libpq's default (prefer)
+    'OPTIONS': {'sslmode': os.environ['POSTGRES_SSLMODE']} if os.environ.get('POSTGRES_SSLMODE') else {},
 }}
 
 AUTH_PASSWORD_VALIDATORS = [

@@ -1,0 +1,29 @@
+# Local development: Django with auto-reload, the database from .env (Supabase), and Redis.
+#   cd backend && docker compose up --build
+#   docker compose run --rm backend python manage.py migrate     # and seed, createsuperuser, admin_totp
+# The frontend's Vite proxy reaches it at 127.0.0.1:8000, as without Docker.
+
+services:
+  backend:
+    build: .
+    env_file: .env
+    environment:
+      # Shared throttle and admin-lockout counters (settings.py: CACHES).
+      REDIS_URL: redis://redis:6379/0
+    # Dev server instead of the image's gunicorn; the source mount makes code changes reload it.
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+    ports:
+      - "127.0.0.1:8000:8000"  # this machine only, not the LAN
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:8-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5

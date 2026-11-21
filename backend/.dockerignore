@@ -1,0 +1,12 @@
+# Secrets stay out of the image; compose passes them in at run time.
+.env
+.env.*
+!.env.example
+.venv/
+staticfiles/
+__pycache__/
+*.pyc
+*.log
+Dockerfile
+docker-compose.yml
+.dockerignore
