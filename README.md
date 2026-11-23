@@ -40,7 +40,7 @@ A simple general store for Bangladesh. React (Vite) frontend, Django + DRF backe
 - Tokens revoked on logout and password change
 - CSRF on cart changes
 - Every error returns one readable `message`
-- Production hardening: HTTPS, HSTS, secure cookies, CSP, custom admin path, Redis-shared throttle counts
+- Production hardening: HTTPS, HSTS, secure cookies, CSP, custom admin path, login lockouts and abuse limits shared across workers (database)
 
 ## Run it
 
@@ -168,11 +168,9 @@ and HTTPS redirect, HSTS and secure cookies turn on.
 | `DJANGO_SECRET_KEY` | long random value, e.g. `python -c "import secrets; print(secrets.token_urlsafe(50))"` |
 | `DJANGO_ALLOWED_HOSTS` | comma-separated hostnames |
 | `DJANGO_ADMIN_PATH` | non-default admin path, e.g. `seller-x7k2/` |
-| `REDIS_URL` | e.g. `redis://localhost:6379/0`; required with more than one worker, so throttle and lockout counts are shared |
 | `DJANGO_NUM_PROXIES` | number of reverse proxies in front of Django (throttling uses the real client IP); above 0 also trusts the proxy's `X-Forwarded-Proto` for HTTPS |
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | comma-separated origins, e.g. `https://haat.vercel.app`, when the frontend proxies `/api` from another domain |
 | `POSTGRES_SSLMODE` | `require` for a remote database such as Supabase |
-| `REDIS_TLS_VERIFY` | `1` to verify a `rediss://` certificate; off by default because Heroku's are self-signed |
 
 Run `manage.py collectstatic` (into `backend/staticfiles/`; the Docker image does this at build) so the
 admin has its CSS, which WhiteNoise serves, and run

@@ -5,7 +5,6 @@ from django import forms
 from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
-from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Count, F, Sum
@@ -15,7 +14,7 @@ from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from django_otp.admin import OTPAdminSite
 
-from .auth import client_ident, locked_out, login_fail_keys, record_login_failure
+from .auth import clear_login_failures, client_ident, locked_out, login_fail_keys, record_login_failure
 from .display import cdn, taka
 from .models import LOW_STOCK, Category, Order, OrderItem, Product
 
@@ -38,7 +37,7 @@ class HaatAdminSite(OTPAdminSite):
             return HttpResponse("Too many failed logins. Try again later.", status=429, content_type="text/plain")
         response = super().login(request, extra_context)
         if response.status_code == 302:  # logged in
-            cache.delete_many(login_fail_keys(username))
+            clear_login_failures(login_fail_keys(username))
         else:
             log.warning("admin login failed: ip=%s username=%r", ip, username)
             record_login_failure(keys)

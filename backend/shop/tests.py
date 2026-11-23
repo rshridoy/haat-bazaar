@@ -3,7 +3,7 @@ from datetime import timedelta
 from unittest import mock
 
 from django.contrib.auth.models import User
-from django.core.cache import cache
+from django.core.cache import caches
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.management import CommandError, call_command
 from django.db import IntegrityError, transaction
@@ -22,12 +22,18 @@ from .serializers import RegisterSerializer
 from .api.accounts import SignupThrottle
 from .auth import GuestOrderThrottle
 
+def clear_caches():
+    """Throttle and lockout counters: the per-process default cache and the shared database one."""
+    for c in caches.all():
+        c.clear()
+
+
 ADDR = {"full_name": "Rahim", "phone": "01712345678", "address": "House 1, Road 2", "city": "Dhaka"}
 
 
 class ShopApiTests(APITestCase):
     def setUp(self):
-        cache.clear()  # throttle counters live in the cache
+        clear_caches()
         cat = Category.objects.create(name="Mobiles", slug="mobiles")
         self.phone = Product.objects.create(category=cat, name="Phone", slug="phone", price=15000, image="https://x.y/a.jpg", stock=3)
         self.case = Product.objects.create(category=cat, name="Case", slug="case", price=100, image="https://x.y/b.jpg", stock=10)
@@ -338,7 +344,7 @@ class ShopApiTests(APITestCase):
 
 class SecurityTests(APITestCase):
     def setUp(self):
-        cache.clear()
+        clear_caches()
         cat = Category.objects.create(name="Mobiles", slug="mobiles")
         self.case = Product.objects.create(category=cat, name="Case", slug="case", price=100, image="https://x.y/b.jpg", stock=50)
         self.user = User.objects.create_user("rahim", password="pass-1234-word")
@@ -461,7 +467,7 @@ class SecurityTests(APITestCase):
 
 class AdminSecurityTests(TestCase):
     def setUp(self):
-        cache.clear()
+        clear_caches()
         self.admin = User.objects.create_superuser("boss", password="pass-1234-word")
         call_command("admin_totp", "boss", stdout=io.StringIO())
         self.device = TOTPDevice.objects.get(user=self.admin)
@@ -508,7 +514,7 @@ class AdminSecurityTests(TestCase):
 class AdminPanelTests(TestCase):
     def setUp(self):
         self.admin = User.objects.create_superuser("boss", password="pass-1234-word")
-        cache.clear()
+        clear_caches()
         call_command("admin_totp", "boss", stdout=io.StringIO())
         d = TOTPDevice.objects.get(user=self.admin)
         code = format(TOTP(d.bin_key, d.step, d.t0, d.digits).token(), f"0{d.digits}d")
@@ -576,7 +582,7 @@ class GuestCheckoutTests(APITestCase):
     """Ordering without an account: the order lives on the session, which is the only key to it."""
 
     def setUp(self):
-        cache.clear()
+        clear_caches()
         cat = Category.objects.create(name="Mobiles", slug="mobiles")
         self.case = Product.objects.create(category=cat, name="Case", slug="case", price=100, image="https://x.y/b.jpg", stock=50)
         self.user = User.objects.create_user("rahim", password="pass-1234-word")

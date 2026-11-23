@@ -6,10 +6,11 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.core.cache import cache
+from django.core.cache import caches
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
 from django.utils import timezone
+from django.utils.connection import ConnectionProxy
 from django.utils.http import url_has_allowed_host_and_scheme
 from rest_framework import exceptions, permissions, throttling
 from rest_framework.authentication import CSRFCheck, TokenAuthentication
@@ -31,6 +32,11 @@ def client_ident(request):
     return str(ipaddress.ip_network(f"{addr}/64", strict=False))
 
 
+# Counters that must hold across workers and restarts (settings.CACHES['security'], a database table).
+# The general anon/user limits stay in the per-process default cache: they run on every request.
+security_cache = ConnectionProxy(caches, "security")
+
+
 class ClientIdent:
     def get_ident(self, request):
         return client_ident(request)
@@ -45,12 +51,13 @@ class UserThrottle(ClientIdent, throttling.UserRateThrottle):
 
 
 class ScopedThrottle(ClientIdent, throttling.ScopedRateThrottle):
-    pass
+    cache = security_cache  # the "auth" scope: logins and sign-ups
 
 
 class GuestOrderThrottle(AnonThrottle):
     """Orders placed without an account, per IP; signed-in buyers and reading orders are not counted."""
     scope = "guest_order"
+    cache = security_cache
 
     def allow_request(self, request, view):
         return request.method != "POST" or super().allow_request(request, view)
@@ -68,16 +75,20 @@ def login_fail_keys(username, request=None):
 
 
 def locked_out(keys):
-    return any(cache.get(k, 0) >= settings.LOGIN_MAX_FAILS for k in keys)
+    return any(security_cache.get(k, 0) >= settings.LOGIN_MAX_FAILS for k in keys)
 
 
 def record_login_failure(keys):
     for k in keys:
-        cache.add(k, 0, settings.LOGIN_LOCKOUT_SECONDS)
+        security_cache.add(k, 0, settings.LOGIN_LOCKOUT_SECONDS)
         try:
-            cache.incr(k)
+            security_cache.incr(k)
         except ValueError:  # the counter expired between add and incr
-            cache.set(k, 1, settings.LOGIN_LOCKOUT_SECONDS)
+            security_cache.set(k, 1, settings.LOGIN_LOCKOUT_SECONDS)
+
+
+def clear_login_failures(keys):
+    security_cache.delete_many(keys)
 
 
 def expired(token):

@@ -103,14 +103,19 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # cookies. Signed-cookie sessions would let a saved cookie replay a guest's orders after logout.
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 
-# Throttle and admin-lockout counters live here. Every worker must share them, so set REDIS_URL
-# whenever more than one process serves the site; local memory is per process and resets on restart.
-CACHES = {'default': {'BACKEND': 'django.core.cache.backends.redis.RedisCache', 'LOCATION': os.environ['REDIS_URL']}
-          if os.environ.get('REDIS_URL') else {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}}
-# Heroku Key-Value Store hands out rediss:// URLs with self-signed certificates, which fail verification.
-# The connection stays encrypted; set REDIS_TLS_VERIFY=1 for a Redis with a CA-signed certificate.
-if os.environ.get('REDIS_URL', '').startswith('rediss://') and os.environ.get('REDIS_TLS_VERIFY') != '1':
-    CACHES['default']['OPTIONS'] = {'ssl_cert_reqs': None}
+CACHES = {
+    # Per worker process, reset on restart: the general anon/user API rate limits. Every request touches
+    # them, so they stay in memory; they are only flood protection, and each worker counting alone is fine.
+    'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'},
+    # Shared by every worker and kept across restarts: login lockouts and the auth, signup and guest-order
+    # limits (shop.auth.security_cache). Only those requests touch it. Table made by migration shop 0008.
+    'security': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'haat_security_cache',
+        # Past MAX_ENTRIES Django culls a third of the rows, live lockouts too, so keep it far above use.
+        'OPTIONS': {'MAX_ENTRIES': 100_000},
+    },
+}
 
 # Errors and security events (admin lockouts) go to stdout, where the process manager collects them.
 LOGGING = {

@@ -1,6 +1,5 @@
 from collections.abc import Mapping
 
-from django.core.cache import cache
 from rest_framework import generics
 from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
@@ -8,8 +7,8 @@ from rest_framework.decorators import api_view, authentication_classes, permissi
 from rest_framework.exceptions import Throttled, ValidationError
 from rest_framework.response import Response
 
-from ..auth import (AnonThrottle, CsrfProtected, ScopedThrottle, UserThrottle, issue_token, locked_out,
-                    login_fail_keys, record_login_failure, safe_next)
+from ..auth import (AnonThrottle, CsrfProtected, ScopedThrottle, UserThrottle, clear_login_failures, issue_token,
+                    locked_out, login_fail_keys, record_login_failure, safe_next, security_cache)
 from ..serializers import RegisterSerializer
 from .checkout import claim_guest_orders
 
@@ -34,12 +33,13 @@ class Login(ObtainAuthToken):
         if not serializer.is_valid():
             record_login_failure(keys)
             raise ValidationError(serializer.errors)
-        cache.delete_many(keys)
+        clear_login_failures(keys)
         return signed_in(request, serializer.validated_data["user"])
 
 
 class SignupThrottle(AnonThrottle):
     scope = "signup"  # daily cap per IP, on top of the per-minute "auth" one
+    cache = security_cache  # a day-long count must survive restarts
 
 
 class Register(generics.CreateAPIView):
