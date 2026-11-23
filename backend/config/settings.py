@@ -12,6 +12,9 @@ if not SECRET_KEY:
     raise ImproperlyConfigured('Set DJANGO_SECRET_KEY (or DJANGO_DEBUG=1 for local development).')
 
 ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+# Sites whose pages may POST to the API, e.g. https://haat.vercel.app when the frontend proxies /api here
+# from its own domain: the browser's Origin header then differs from the Host Django sees.
+CSRF_TRUSTED_ORIGINS = [o for o in os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',') if o]
 
 if not DEBUG:
     SECURE_SSL_REDIRECT = True
@@ -39,6 +42,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # serves admin CSS/JS where no web server does (Heroku)
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -87,6 +91,12 @@ USE_I18N = True
 USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'  # `manage.py collectstatic` target, for admin CSS in production
+# Gzip/Brotli copies at collectstatic time. Not the Manifest variant: tests run with DEBUG off and
+# would fail on admin pages without a collected manifest.
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage'},
+}
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Keep sessions server-side: they hold the cart and guest orders, and logout's flush must kill old
@@ -97,6 +107,10 @@ SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 # whenever more than one process serves the site; local memory is per process and resets on restart.
 CACHES = {'default': {'BACKEND': 'django.core.cache.backends.redis.RedisCache', 'LOCATION': os.environ['REDIS_URL']}
           if os.environ.get('REDIS_URL') else {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}}
+# Heroku Key-Value Store hands out rediss:// URLs with self-signed certificates, which fail verification.
+# The connection stays encrypted; set REDIS_TLS_VERIFY=1 for a Redis with a CA-signed certificate.
+if os.environ.get('REDIS_URL', '').startswith('rediss://') and os.environ.get('REDIS_TLS_VERIFY') != '1':
+    CACHES['default']['OPTIONS'] = {'ssl_cert_reqs': None}
 
 # Errors and security events (admin lockouts) go to stdout, where the process manager collects them.
 LOGGING = {

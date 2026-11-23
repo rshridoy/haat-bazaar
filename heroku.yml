@@ -1,0 +1,10 @@
+# Heroku container deploy of the backend (heroku stack:set container). The build context is backend/,
+# the Dockerfile's directory. The frontend is deployed separately.
+build:
+  docker:
+    web: backend/Dockerfile
+release:
+  # Runs before each new release goes live; a failed migration stops the deploy.
+  image: web
+  command:
+    - python manage.py migrate --noinput
